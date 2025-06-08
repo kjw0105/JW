@@ -1,233 +1,193 @@
-#  Play scene - the main game play scene
-from pygame.locals import *
+# ScenePlay.py
+import pygame
 import pygwidgets
 import pyghelpers
-from Player import *
-from Baddies import *
-from Goodies import *
 import random
 
-def showCustomYesNoDialog(theWindow, theText):
-    oDialogBackground = pygwidgets.Image(theWindow, (40, 250),
-                                            'images/dialog.png')
-    oPromptDisplayText = pygwidgets.DisplayText(theWindow, (0, 290),
-                                            theText, width=WINDOW_WIDTH,
-                                            justified='center', fontSize=36)
+from Constants import *
+from Player import *
+from ItemMgr import *  # 통합 매니저 사용
 
-    oYesButton = pygwidgets.CustomButton(theWindow, (320, 370),
-                                            'images/gotoHighScoresNormal.png',
-                                            over='images/gotoHighScoresOver.png',
-                                            down='images/gotoHighScoresDown.png',
-                                            disabled='images/gotoHighScoresDisabled.png')
+class Rectangle():
+    def __init__(self, window, rect, fillColor, borderWidth=0, borderColor=None):
+        self.window = window
+        self.rect = pygame.Rect(rect)
+        self.fillColor = fillColor
+        self.borderWidth = borderWidth
+        self.borderColor = borderColor if borderColor else fillColor 
 
-    oNoButton = pygwidgets.CustomButton(theWindow, (62, 370),
-                                            'images/noThanksNormal.png',
-                                            over='images/noThanksOver.png',
-                                            down='images/noThanksDown.png',
-                                            disabled='images/noThanksDisabled.png')
+    def draw(self):
+        if self.borderWidth > 0:
+            pygame.draw.rect(self.window, self.borderColor, self.rect, self.borderWidth)
+            innerRect = self.rect.inflate(-2 * self.borderWidth, -2 * self.borderWidth)
+            pygame.draw.rect(self.window, self.fillColor, innerRect, 0)
+        else:
+            pygame.draw.rect(self.window, self.fillColor, self.rect, 0)
 
-    choiceAsBoolean = pyghelpers.customYesNoDialog(theWindow,
-                                            oDialogBackground, oPromptDisplayText,
-                                            oYesButton, oNoButton)
-    return choiceAsBoolean
+    def setWidth(self, newWidth):
+        self.rect.width = newWidth
 
-BOTTOM_RECT = (0, GAME_HEIGHT + 1, WINDOW_WIDTH,
-                                WINDOW_HEIGHT - GAME_HEIGHT)
-STATE_WAITING = 'waiting'
-STATE_PLAYING = 'playing'
-STATE_GAME_OVER = 'game over'
+    def setColor(self, newColor):
+        self.fillColor = newColor
+
 
 class ScenePlay(pyghelpers.Scene):
-
     def __init__(self, window):
         self.window = window
-        from ItemMgr import ItemMgr
-        from Baddies import Baddie
 
-        self.controlsBackground = pygwidgets.Image(self.window,
-                                        (0, GAME_HEIGHT),
-                                        'images/controlsBackground.jpg')
+        # 배경 이미지
+        raw_background_image = pygame.image.load('images/playBackground.jpg')
+        scaled_background_image = pygame.transform.scale(raw_background_image, (WINDOW_WIDTH, WINDOW_HEIGHT))
+        self.backgroundImage = pygwidgets.Image(self.window, (0, 0), scaled_background_image)
 
-        self.quitButton = pygwidgets.CustomButton(self.window,
-                                        (30, GAME_HEIGHT + 90),
-                                        up='images/quitNormal.png',
-                                        down='images/quitDown.png',
-                                        over='images/quitOver.png',
-                                        disabled='images/quitDisabled.png')
-
-        self.highScoresButton = pygwidgets.CustomButton(self.window,
-                                        (190, GAME_HEIGHT + 90),
-                                        up='images/gotoHighScoresNormal.png',
-                                        down='images/gotoHighScoresDown.png',
-                                        over='images/gotoHighScoresOver.png',
-                                        disabled='images/gotoHighScoresDisabled.png')
-
-        self.newGameButton = pygwidgets.CustomButton(self.window,
-                                        (450, GAME_HEIGHT + 90),
-                                        up='images/startNewNormal.png',
-                                        down='images/startNewDown.png',
-                                        over='images/startNewOver.png',
-                                        disabled='images/startNewDisabled.png',
-                                        enterToActivate=True)
-
-        self.soundCheckBox = pygwidgets.TextCheckBox(self.window,
-                                        (430, GAME_HEIGHT + 17),
-                                        'Background music',
-                                        True, textColor=WHITE)
-
-        self.gameOverImage = pygwidgets.Image(self.window, (140, 180),
-                                        'images/gameOver.png')
-
-        self.titleText = pygwidgets.DisplayText(self.window,
-                                        (70, GAME_HEIGHT + 17),
-                                        'Score:                                 High Score:',
-                                        fontSize=24, textColor=WHITE)
-
-        self.scoreText = pygwidgets.DisplayText(self.window,
-                                        (80, GAME_HEIGHT + 47), '0',
-                                        fontSize=36, textColor=WHITE,
-                                        justified='right')
-
-        self.highScoreText = pygwidgets.DisplayText(self.window,
-                                        (270, GAME_HEIGHT + 47), '',
-                                        fontSize=36, textColor=WHITE,
-                                        justified='right')
-
-        pygame.mixer.music.load('sounds/background.mid')
-        self.dingSound = pygame.mixer.Sound('sounds/ding.wav')
-        self.gameOverSound = pygame.mixer.Sound('sounds/gameover.wav')
-
-        # Instantiate objects
         self.oPlayer = Player(self.window)
-        self.oBaddieMgr = ItemMgr(self.window, Baddie, add_rate=8)
-        self.oGoodieMgr = ItemMgr(self.window, Goodie, add_rate=random.randrange(90, 111))
-        self.highestHighScore = 0
-        self.lowestHighScore = 0
-        self.backgroundMusic = True
+        self.playerRect = self.oPlayer.update(WINDOW_WIDTH // 2, GAME_HEIGHT // 2)
+        self.oItemMgr = ItemMgr(self.window)  # 통합 매니저
+
         self.score = 0
-        self.playingState = STATE_WAITING
+        self.scoreText = pygwidgets.DisplayText(self.window, (400, 570), 
+                                                 'Score: ' + str(self.score),
+                                                 fontSize=48, textColor=WHITE)
+        
+        # 체력 바
+        self.healthBarOutline = Rectangle(self.window,
+                                                     (HEALTH_BAR_OFFSET_X, HEALTH_BAR_OFFSET_Y, 
+                                                      HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT),
+                                                     WHITE, 2)
+        self.healthBarFill = Rectangle(self.window,
+                                                 (HEALTH_BAR_OFFSET_X, HEALTH_BAR_OFFSET_Y,
+                                                  HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT),
+                                                 GREEN)
+        self.healthText = pygwidgets.DisplayText(self.window, (HEALTH_BAR_OFFSET_X, HEALTH_BAR_OFFSET_Y - 30),
+                                                 'Health: ' + str(self.oPlayer.getHealth()),
+                                                 fontSize=24, textColor=WHITE)
+
+        self.level = 1
+        self.frames_in_level = 0
+
+        # 효과음/음악 (실제 파일 없으면 try-except 처리 권장)
+        self.loseSound = pygame.mixer.Sound('sounds/lose.wav')
+        self.getGoodieSound = pygame.mixer.Sound('sounds/get_goodie.wav')
+        try:
+            self.invincibleHitSound = pygame.mixer.Sound('sounds/invincible_hit.wav')
+            self.invincibleHitSound.set_volume(0.6)
+        except:
+            self.invincibleHitSound = None
+
+        try:
+            self.backgroundMusic = pygame.mixer.Sound('sounds/background.wav')
+            self.backgroundMusic.set_volume(0.3)
+        except:
+            self.backgroundMusic = None
+
+        try:
+            self.invincibleBackgroundMusic = pygame.mixer.Sound('sounds/invincible_background.wav')
+            self.invincibleBackgroundMusic.set_volume(0.4)
+        except:
+            self.invincibleBackgroundMusic = None
+
+        self.wasInvincibleLastFrame = False
 
     def getSceneKey(self):
         return SCENE_PLAY
 
     def enter(self, data):
-        self.getHiAndLowScores()
-
-    def getHiAndLowScores(self):
-        # Ask the High Scores scene for a dict of  scores
-        # that looks like this:
-        #  {'highest': highestScore, 'lowest': lowestScore}
-        infoDict = self.request(SCENE_HIGH_SCORES, HIGH_SCORES_DATA)
-        self.highestHighScore = infoDict['highest']
-        self.highScoreText.setValue(self.highestHighScore)
-        self.lowestHighScore = infoDict['lowest']
-
-    def reset(self):   # start a new game
+        self.oItemMgr.reset()
+        self.oPlayer = Player(self.window)
         self.score = 0
-        self.scoreText.setValue(self.score)
-        self.getHiAndLowScores()
-
-        # Tell the managers to reset themselves
-        self.oBaddieMgr.reset()
-        self.oGoodieMgr.reset()
-
+        self.scoreText.setValue('Score: ' + str(self.score))
+        self.level = 1
+        self.frames_in_level = 0
         if self.backgroundMusic:
-            pygame.mixer.music.play(-1, 0.0)
-        self.newGameButton.disable()
-        self.highScoresButton.disable()
-        self.soundCheckBox.disable()
-        self.quitButton.disable()
-        pygame.mouse.set_visible(False)
+            self.backgroundMusic.play(-1)
+        if self.invincibleBackgroundMusic:
+            self.invincibleBackgroundMusic.stop()
+        self.wasInvincibleLastFrame = False
+        self.playerRect = self.oPlayer.update(WINDOW_WIDTH // 2, GAME_HEIGHT // 2)
 
     def handleInputs(self, eventsList, keyPressedList):
-        if self.playingState == STATE_PLAYING:
-            return  # ignore button events while playing
-
         for event in eventsList:
-            if self.newGameButton.handleEvent(event):
-                self.reset()
-                self.playingState = STATE_PLAYING
-
-            if self.highScoresButton.handleEvent(event):
-                self.goToScene(SCENE_HIGH_SCORES)
-
-            if self.soundCheckBox.handleEvent(event):
-                self.backgroundMusic = self.soundCheckBox.getValue()
-
-            if self.quitButton.handleEvent(event):
-                self.quit()
+            if event.type == pygame.MOUSEMOTION:
+                self.playerRect = self.oPlayer.update(event.pos[0], event.pos[1])
 
     def update(self):
-        if self.playingState != STATE_PLAYING:
-            return  # only update when playing
+        # 무적/일반 음악 전환
+        currentInvincible = self.oPlayer.isInvincible()
+        if currentInvincible and not self.wasInvincibleLastFrame:
+            if self.backgroundMusic:
+                self.backgroundMusic.stop()
+            if self.invincibleBackgroundMusic:
+                self.invincibleBackgroundMusic.play(-1)
+        elif not currentInvincible and self.wasInvincibleLastFrame:
+            if self.invincibleBackgroundMusic:
+                self.invincibleBackgroundMusic.stop()
+            if self.backgroundMusic:
+                self.backgroundMusic.play(-1)
+        self.wasInvincibleLastFrame = currentInvincible
 
-        # Move the Player to the mouse position, get back its rect
-        mouseX, mouseY = pygame.mouse.get_pos()
-        playerRect = self.oPlayer.update(mouseX, mouseY)
+        # 레벨업 처리
+        self.frames_in_level += 1
+        if self.frames_in_level % LEVEL_UP_INTERVAL == 0:
+            self.level += 1
 
-        # Tell the GoodieMgr to move all Goodies
-        # Returns the number of Goodies that the Player contacted
-        nGoodiesHit = self.oGoodieMgr.update(playerRect)
-        if nGoodiesHit > 0:
-            self.dingSound.play()
-            self.score = self.score + (nGoodiesHit * POINTS_FOR_GOODIE)
+        game_level_factor = (self.level - 1) * 0.1
 
-        # Tell the BaddieMgr to move all the Baddies
-        # Returns the number of Baddies that fell off the bottom
-        nBaddiesEvaded  = self.oBaddieMgr.update()
-        self.score = self.score + (nBaddiesEvaded * POINTS_FOR_BADDIE_EVADED)
-        
-        self.scoreText.setValue(self.score)
-
-        # Check if the Player has hit any Baddie
-        if self.oBaddieMgr.hasPlayerHitBaddie(playerRect):
-            pygame.mouse.set_visible(True)
-            pygame.mixer.music.stop()
-
-            self.gameOverSound.play()
-            self.playingState = STATE_GAME_OVER
-            self.draw()  # force drawing of game over message
-
-            if self.score > self.lowestHighScore:
-                scoreString = 'Your score: ' + str(self.score) + '\n'
-                if self.score > self.highestHighScore:
-                    dialogText = (scoreString +
-                                       'is a new high score, CONGRATULATIONS!')
+        # 아이템 관리 및 충돌 체크
+        hitTypes = self.oItemMgr.update(self.playerRect, game_level_factor)
+        for type_, item in hitTypes:
+            if type_ == 'baddie':
+                if self.oPlayer.isInvincible():
+                    if self.invincibleHitSound:
+                        self.invincibleHitSound.play()
                 else:
-                    dialogText = (scoreString +
-                                      'gets you on the high scores list.')
+                    self.oPlayer.takeDamage(10)
+                    self.loseSound.play()
+                    if not self.oPlayer.isAlive():
+                        if self.backgroundMusic:
+                            self.backgroundMusic.stop()
+                        if self.invincibleBackgroundMusic:
+                            self.invincibleBackgroundMusic.stop()
+                        # 점수 기록, 게임오버 씬 전환 등 처리
+                        highScoresData = self.request(SCENE_HIGH_SCORES, HIGH_SCORES_DATA)
+                        highestScore = highScoresData['highest']
+                        lowestScore = highScoresData['lowest']
+                        if self.score > lowestScore:
+                            self.goToScene(SCENE_HIGH_SCORES, self.score)
+                        else:
+                            self.goToScene(SCENE_HIGH_SCORES)
+            elif type_ == 'score':
+                self.score += POINTS_FOR_GOODIE
+                self.getGoodieSound.play()
+                self.scoreText.setValue('Score: ' + str(self.score))
+            elif type_ == 'health':
+                self.oPlayer.heal(HEALTH_FOR_GOODIE)
+                self.getGoodieSound.play()
+            elif type_ == 'shield':
+                self.oPlayer.setInvincible(SHIELD_DURATION_SECONDS)
+                self.getGoodieSound.play()
 
-                result = showCustomYesNoDialog(self.window, dialogText)
-                if result: # navigate
-                    self.goToScene(SCENE_HIGH_SCORES, self.score)  
+        # 체력바 색/크기 조정
+        current_health_percent = self.oPlayer.getHealth() / PLAYER_INITIAL_HEALTH
+        if current_health_percent > 0.6:
+            self.healthBarFill.setColor(GREEN)
+        elif current_health_percent > 0.3:
+            self.healthBarFill.setColor(BLUE)
+        else:
+            self.healthBarFill.setColor(RED)
+        self.healthBarFill.setWidth(int(HEALTH_BAR_WIDTH * current_health_percent))
+        self.healthText.setValue('Health: ' + str(self.oPlayer.getHealth()))
 
-            self.newGameButton.enable()
-            self.highScoresButton.enable()
-            self.soundCheckBox.enable()
-            self.quitButton.enable()
-    
     def draw(self):
-        self.window.fill(BLACK)
-    
-        # Tell the managers to draw all the Baddies and Goodies
-        self.oBaddieMgr.draw()
-        self.oGoodieMgr.draw()
-    
-        # Tell the Player to draw itself
+        self.backgroundImage.draw()
         self.oPlayer.draw()
-    
-        # Draw all the info at the bottom of the window
-        self.controlsBackground.draw()
-        self.titleText.draw()
+        self.oItemMgr.draw()
         self.scoreText.draw()
-        self.highScoreText.draw()
-        self.soundCheckBox.draw()
-        self.quitButton.draw()
-        self.highScoresButton.draw()
-        self.newGameButton.draw()
-
-        if self.playingState == STATE_GAME_OVER:
-            self.gameOverImage.draw()
+        self.healthBarFill.draw()
+        self.healthBarOutline.draw()
+        self.healthText.draw()
 
     def leave(self):
-        pygame.mixer.music.stop()
+        if self.backgroundMusic:
+            self.backgroundMusic.stop()
+        if self.invincibleBackgroundMusic:
+            self.invincibleBackgroundMusic.stop()

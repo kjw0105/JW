@@ -1,55 +1,61 @@
 # ItemMgr.py
 import random
+from Constants import *
+from Item import Item
 
-class ItemMgr:
-    def __init__(self, window, ItemClass, add_rate=8, *args, **kwargs):
+class ItemMgr():
+    def __init__(self, window):
         self.window = window
-        self.ItemClass = ItemClass  # Baddie, Goodie 등 클래스를 받음
-        self.itemList = []
-        self.add_rate = add_rate
-        self.nFramesTilNextItem = add_rate
-        self.args = args
-        self.kwargs = kwargs
+        self.windowWidth = window.get_width()
+        self.windowHeight = window.get_height()
+        self.itemsList = []
+        self.nFramesTilNextBaddie = BADDIE_ADD_NEW_FREQ
+        self.current_max_speed = BADDIE_MAX_SPEED
+        self.goodie_rate_hi = GOODIE_ADD_NEW_FREQ
+        self.goodie_rate_low = GOODIE_ADD_NEW_FREQ * GOODIE_ADD_NEW_RATE
 
     def reset(self):
-        self.itemList = []
-        self.nFramesTilNextItem = self.add_rate
+        self.itemsList = []
+        self.nFramesTilNextBaddie = BADDIE_ADD_NEW_FREQ
+        self.current_max_speed = BADDIE_MAX_SPEED
+        self.goodie_rate_hi = GOODIE_ADD_NEW_FREQ
+        self.goodie_rate_low = GOODIE_ADD_NEW_FREQ * GOODIE_ADD_NEW_RATE
 
-    def update(self, *collision_args):
-        nRemoved = 0
-        itemListCopy = self.itemList.copy()
-        for item in itemListCopy:
-            deleteMe = item.update()
-            if deleteMe:
-                self.itemList.remove(item)
-                nRemoved += 1
-            elif collision_args:
-                # collision_args는 플레이어 rect 등
-                if hasattr(item, 'collide') and item.collide(*collision_args):
-                    self.itemList.remove(item)
-                    nRemoved += 1
+    def update(self, playerRect, level_factor):
+        # Baddie 생성
+        self.current_max_speed = BADDIE_MAX_SPEED + int(level_factor * 5)
+        if self.current_max_speed > 20: self.current_max_speed = 20
+        self.nFramesTilNextBaddie -= 1
+        if self.nFramesTilNextBaddie == 0:
+            oBaddie = Item(self.window, self.windowWidth, self.windowHeight, 'baddie', self.current_max_speed)
+            self.itemsList.append(oBaddie)
+            self.nFramesTilNextBaddie = BADDIE_ADD_NEW_FREQ - int(level_factor * 2)
+            if self.nFramesTilNextBaddie < 1: self.nFramesTilNextBaddie = 1
 
-        self.nFramesTilNextItem -= 1
-        if self.nFramesTilNextItem <= 0:
-            newItem = self.ItemClass(self.window, *self.args, **self.kwargs)
-            self.itemList.append(newItem)
-            self.nFramesTilNextItem = self.add_rate  # 혹은 Goodie는 랜덤 범위
+        # Goodie 생성
+        if random.randrange(random.randint(int(self.goodie_rate_low), int(self.goodie_rate_hi))) == 0:
+            gtype = random.choice(['score', 'health', 'shield'])
+            oGoodie = Item(self.window, self.windowWidth, self.windowHeight, gtype)
+            self.itemsList.append(oGoodie)
 
-        return nRemoved
+        # 업데이트 및 충돌 처리
+        hitTypes = []
+        for item in self.itemsList[:]:
+            offscreen = item.update()
+            if item.getType() == 'baddie':
+                if item.collide(playerRect):
+                    self.itemsList.remove(item)
+                    hitTypes.append(('baddie', item))
+                elif offscreen:
+                    self.itemsList.remove(item)
+            else:
+                if item.collide(playerRect):
+                    hitTypes.append((item.getType(), item))
+                    self.itemsList.remove(item)
+                elif offscreen:
+                    self.itemsList.remove(item)
+        return hitTypes
 
     def draw(self):
-        for item in self.itemList:
+        for item in self.itemsList:
             item.draw()
-
-  # ItemMgr.py 내부에 추가
-    def hasPlayerHitBaddie(self, playerRect):
-        return self.hasPlayerHitItem(playerRect)
-
-    def hasPlayerHitGoodie(self, playerRect):
-        return self.hasPlayerHitItem(playerRect)
-
-    def hasPlayerHitItem(self, playerRect):
-        for item in self.itemList:
-            if item.collide(playerRect):
-                return True
-        return False

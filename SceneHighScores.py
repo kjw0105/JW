@@ -1,155 +1,80 @@
-# High Scores scene
+# High scores scene
+import pygame
 import pygwidgets
 import pyghelpers
-from HighScoresData import *
-
-def showCustomAnswerDialog(theWindow, theText):
-    oDialogBackground = pygwidgets.Image(theWindow, (35, 450),
-                                                'images/dialog.png')
-    oPromptDisplayText = pygwidgets.DisplayText(theWindow, (0, 480),
-                                                theText, width=WINDOW_WIDTH,
-                                                justified='center', fontSize=36)
-    oUserInputText = pygwidgets.InputText(theWindow, (200, 550), '',
-                                                fontSize=36, initialFocus=True)
-    oNoButton = pygwidgets.CustomButton(theWindow, (65, 595),
-                                                'images/noThanksNormal.png',
-                                                over='images/noThanksOver.png',
-                                                down='images/noThanksDown.png',
-                                                disabled='images/noThanksDisabled.png')
-    oYesButton = pygwidgets.CustomButton(theWindow, (330, 595),
-                                                'images/addNormal.png',
-                                                over='images/addOver.png',
-                                                down='images/addDown.png',
-                                                disabled='images/addDisabled.png')
-    userAnswer = pyghelpers.customAnswerDialog(theWindow,
-                                                oDialogBackground,
-                                                oPromptDisplayText, oUserInputText,
-                                                oYesButton, oNoButton)
-    return userAnswer
-
-def showCustomResetDialog(theWindow, theText):
-    oDialogBackground = pygwidgets.Image(theWindow,
-                                               (35, 450), 'images/dialog.png')
-    oPromptDisplayText = pygwidgets.DisplayText(theWindow, (0, 480),
-                                                theText, width=WINDOW_WIDTH,
-                                                justified='center', fontSize=36)
-    oNoButton = pygwidgets.CustomButton(theWindow, (65, 595),
-                                                'images/cancelNormal.png',
-                                                over='images/cancelOver.png',
-                                                down='images/cancelDown.png',
-                                                disabled='images/cancelDisabled.png')
-    oYesButton = pygwidgets.CustomButton(theWindow, (330, 595),
-                                                'images/okNormal.png',
-                                                over='images/okOver.png',
-                                                down='images/okDown.png',
-                                                disabled='images/okDisabled.png')
-    choiceAsBoolean = pyghelpers.customYesNoDialog(theWindow,
-                                                oDialogBackground, oPromptDisplayText,
-                                                oYesButton, oNoButton)
-    return choiceAsBoolean
-
+from Constants import * # All high scores related constants are here
+from HighScoresData import * # For HighScoresData class
 
 class SceneHighScores(pyghelpers.Scene):
     def __init__(self, window):
         self.window = window
-        self.oHighScoresData = HighScoresData()
-        
-        self.backgroundImage = pygwidgets.Image(self.window,
-                                                (0, 0),
-                                                'images/highScoresBackground.jpg')
 
-        self.namesField = pygwidgets.DisplayText(self.window, (260, 84), '',
-                                                   fontSize=48, textColor=BLACK,
-                                                   width=300, justified='left')
-        self.scoresField = pygwidgets.DisplayText(self.window,
-                                                  (25, 84), '', fontSize=48,
-                                                  textColor=BLACK,
-                                                  width=175, justified='right')
+        self.oHighScoresData = HighScoresData() # Load existing high scores
 
-        self.quitButton = pygwidgets.CustomButton(self.window,
-                                                  (30, 650),
-                                                  up='images/quitNormal.png',
-                                                  down='images/quitDown.png',
-                                                  over='images/quitOver.png',
-                                                  disabled='images/quitDisabled.png')
+        self.titleText = pygwidgets.DisplayText(self.window, (0, 50),
+                                                 'High Scores',
+                                                 fontSize=60, textColor=WHITE,
+                                                 width=WINDOW_WIDTH, justified='center')
 
-        self.backButton = pygwidgets.CustomButton(self.window,
-                                                 (240, 650),
-                                                 up='images/backNormal.png',
-                                                 down='images/backDown.png',
-                                                 over='images/backOver.png',
-                                                 disabled='images/backDisabled.png')
+        self.scoreLabels = []
+        # Create DisplayText objects for each high score slot
+        for i in range(HIGH_SCORES_TO_KEEP):
+            aLabel = pygwidgets.DisplayText(self.window, (0, 0), '', 
+                                             fontSize=40, textColor=WHITE,
+                                             width=WINDOW_WIDTH, justified='center')
+            self.scoreLabels.append(aLabel)
 
-        self.resetScoresButton = pygwidgets.CustomButton(self.window,
-                                                 (450, 650),
-                                                 up='images/resetNormal.png',
-                                                 down='images/resetDown.png',
-                                                 over='images/resetOver.png',
-                                                 disabled='images/resetDisabled.png')
+        # Positioning the score labels
+        currentY = 150
+        for oLabel in self.scoreLabels:
+            # === 수정된 줄: 위치를 튜플 (0, currentY)로 전달합니다 ===
+            oLabel.setLoc((0, currentY)) 
+            currentY = currentY + 50 # Spacing between scores
 
-        self.showHighScores()
-
+        self.backButton = pygwidgets.TextButton(self.window, (250, 550), 'Back',
+                                                 fontSize=30)
+    
     def getSceneKey(self):
         return SCENE_HIGH_SCORES
 
-    def enter(self, newHighScoreValue=None):
-        # This can be called two different ways:
-        # 1. If no new high score, newHighScoreValue will be None
-        # 2. newHighScoreValue is score of the current game - in top 10
-        if newHighScoreValue is None:
-            return  # nothing to do
+    def enter(self, data):
+        # Data contains the new score if coming from game over
+        # If 'data' is an integer, it's a new score to add
+        if isinstance(data, int):
+            self.oHighScoresData.addHighScore(data)
 
-        self.draw() # draw before showing dialog
-        # We have a new high score sent in from the Play scene
-        dialogQuestion = ('To record your score of ' +
-                                 str(newHighScoreValue) + ',\n' +
-                                 'please enter your name:')
-        playerName = showCustomAnswerDialog(self.window,
-                                                                    dialogQuestion)
-        if playerName is None:
-            return  # user pressed Cancel
+        highScores = self.oHighScoresData.getHighScores()
 
-        # Add user and score to high scores
-        if playerName == '':
-            playerName = 'Anonymous'
-        self.oHighScoresData.addHighScore(playerName,
-                                                            newHighScoreValue)
+        # Populate the DisplayText labels with current high scores
+        for i, score in enumerate(highScores):
+            if i < HIGH_SCORES_TO_KEEP: 
+                self.scoreLabels[i].setValue(str(score))
 
-        # Show the updated high scores table
-        self.showHighScores()
-
-    def showHighScores(self):
-        # Get the scores and names, show them in two fields
-        scoresList, namesList = self.oHighScoresData.getScoresAndNames()
-        self.namesField.setValue(namesList)
-        self.scoresField.setValue(scoresList)        
+        # If there are fewer scores than HIGH_SCORES_TO_KEEP, clear remaining labels
+        for i in range(len(highScores), HIGH_SCORES_TO_KEEP):
+            self.scoreLabels[i].setValue('') 
 
     def handleInputs(self, eventsList, keyPressedList):
         for event in eventsList:
-            if self.quitButton.handleEvent(event):
-                self.quit()
+            if self.backButton.handleEvent(event):
+                self.goToScene(SCENE_SPLASH) # Go back to the splash screen
 
-            elif self.backButton.handleEvent(event):
-                self.goToScene(SCENE_PLAY)
-
-            elif self.resetScoresButton.handleEvent(event):
-                confirmed = showCustomResetDialog(self.window,
-                                        'Are you sure you want to \nRESET the high scores?')
-                if confirmed:
-                    self.oHighScoresData.resetScores()
-                    self.showHighScores()
+    def update(self):
+        pass
 
     def draw(self):
-        self.backgroundImage.draw()
-        self.scoresField.draw()
-        self.namesField.draw()
-        self.quitButton.draw()
-        self.resetScoresButton.draw()
+        self.window.fill(BLACK)
+        self.titleText.draw()
+        for oLabel in self.scoreLabels:
+            oLabel.draw()
         self.backButton.draw()
 
     def respond(self, requestID):
         if requestID == HIGH_SCORES_DATA:
-            # Request from Play scene for the highest and lowest scores
-            # Build a dictionary and return it to the Play scene
-            highestScore, lowestScore = self.oHighScoresData.getHighestAndLowest()
-            return {'highest':highestScore, 'lowest':lowestScore}
+            all_scores = self.oHighScoresData.getHighScores()
+            
+            highestScore = all_scores[0] if all_scores else 0
+            lowestScore = all_scores[-1] if all_scores else 0 
+            
+            return {'highest': highestScore, 'lowest': lowestScore}
+        return None

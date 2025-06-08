@@ -15,6 +15,7 @@ import pyghelpers
 from SceneSplash import *
 from ScenePlay import *
 from SceneHighScores import *
+from SceneControls import * # Import the new controls scene
 
 # 2 - Define constants
 FRAMES_PER_SECOND = 40
@@ -29,7 +30,8 @@ window = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 # Instantiate all scenes and store them in a list
 scenesList = [SceneSplash(window),
                     SceneHighScores(window),
-                    ScenePlay(window)]
+                    ScenePlay(window),
+                    SceneControls(window)] # Add the new controls scene
 
 # Create the scene manager, passing in the scenes list and the FPS
 oSceneMgr = pyghelpers.SceneMgr(scenesList, FRAMES_PER_SECOND)
